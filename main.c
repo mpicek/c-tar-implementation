@@ -19,6 +19,7 @@ Notes:
 #define NAME_LENGTH 100 //max length of filename 99, because terminated with \0
 #define SIZE_LENGTH 12
 #define SIZE_LOCATION 124
+#define MULTIPLE 512
 
 int octToDec(char* str){
 	int result = 0;
@@ -35,25 +36,35 @@ int listFileAndJump(FILE* f){
 	char name[NAME_LENGTH];
 	char sizeStr[SIZE_LENGTH];
 	long positionThen = ftell(f);
+
+	//NAME
+	fgets(name, NAME_LENGTH, f);
 	long positionNow = ftell(f);
+	fseek(f, positionThen-positionNow, SEEK_CUR);
+	fseek(f, SIZE_LOCATION, SEEK_CUR);
+	if(name[0] == 0) return 0;
 	printf("%s\n", name);
 
-	fgets(name, NAME_LENGTH, f);
-	fseek(f, positionThen-positionNow, SEEK_CUR);
-
-	printf("pozice od zacatku souboru: %ld\n", ftell(f)); 
-	fseek(f, SIZE_LOCATION, SEEK_CUR);
+	//SIZE
 	fgets(sizeStr, SIZE_LENGTH, f);
+	fseek(f,-SIZE_LOCATION - SIZE_LENGTH + 1, SEEK_CUR);
 
 	int size = octToDec(sizeStr);
-	printf("%d\n", size);
-	return 0;
+	//printf("%d\n", size);
+
+	int padding = 0;
+	if(size % MULTIPLE) padding = 1;
+	int jump = MULTIPLE*(1 + size/MULTIPLE + padding);
+	fseek(f, jump, SEEK_CUR);
+
+	return 1;
 } 
 
 void listFiles(char *fileName){
 
 	FILE *f = fopen(fileName, "r");
 
+	printf("%s\n", fileName);
 	if(f == NULL)
 		err(1, "ERROR: ");
 
@@ -80,7 +91,7 @@ void HandleOptions(int argc, char *argv[]){
 				errx(1, "Missing filename");
 
 			strcpy(fileName, argv[i]);
-			printf("filename: %s\n", fileName);
+		//	printf("filename: %s\n", fileName);
 		}
 
 		else if(!strcmp(argv[i], "-t"))                   //LIST
