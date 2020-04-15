@@ -64,7 +64,7 @@ void listFiles(char *fileName){
 
 	FILE *f = fopen(fileName, "r");
 
-	printf("%s\n", fileName);
+	//printf("%s\n", fileName);
 	if(f == NULL)
 		err(1, "ERROR: ");
 
