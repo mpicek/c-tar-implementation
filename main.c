@@ -10,6 +10,26 @@ Notes:
 #include <err.h>
 #include <string.h>
 
+//int fseek(FILE *stream, long int offset, int whence)
+
+FILE* listFileAndJump(FILE* f){
+	FILE *fcp = f;
+	char name[100];
+	char size[13];
+	long positionThen = ftell(f);
+	fgets(name, 100, f);
+	long positionNow = ftell(f);
+	printf("%s\n", name);
+
+	fseek(f, positionThen-positionNow, SEEK_CUR);
+	printf("%ld\n", ftell(f)); 
+	fseek(f, 124, SEEK_CUR);
+	fgets(size, 12, f);
+	size[12] = 0;
+	printf("%s\n", size);
+	return NULL;
+}
+
 void listFiles(char *fileName){
 	char name[100];
 
@@ -17,10 +37,13 @@ void listFiles(char *fileName){
 	if(f == NULL)
 		err(1, "ERROR: ");
 
-	fgets(name, 100, f);
+	//fgets(name, 100, f);
+	
+	//while(f != NULL)
+		listFileAndJump(f);	
+
 	fclose(f);
 
-	printf("%s\n", name);
 }
 
 void HandleOptions(int argc, char *argv[]){
