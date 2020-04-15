@@ -4,62 +4,81 @@ Author Martin Picek
 Notes:
 	Blocking size is ignored - it is set to 20 by default
 	https://www.gnu.org/software/tar/manual/html_node/Blocking-Factor.html
+	numbers in tar header are octal numbers!! (8^n)
+	everything padded to the multiple of 512 (except the end - blocksize)
 */
 
 #include <stdio.h>
 #include <err.h>
 #include <string.h>
 
-//int fseek(FILE *stream, long int offset, int whence)
+// NAME_MAX ... max length of component in a path (i.e. filenames, dir names)
+// PATH_MAX ... max length of the whole path to a filename (all components)
+#include <limits.h> 
 
-FILE* listFileAndJump(FILE* f){
-	FILE *fcp = f;
-	char name[100];
-	char size[13];
+#define NAME_LENGTH 100 //max length of filename 99, because terminated with \0
+#define SIZE_LENGTH 12
+#define SIZE_LOCATION 124
+
+int octToDec(char* str){
+	int result = 0;
+	int i = 0;
+	while(str[i])
+		result = 8*(result+str[i++]-'0');
+
+	return result/8;
+}
+
+
+int listFileAndJump(FILE* f){
+	/* returns 1 when reads file, 0 when there is no file*/
+	char name[NAME_LENGTH];
+	char sizeStr[SIZE_LENGTH];
 	long positionThen = ftell(f);
-	fgets(name, 100, f);
 	long positionNow = ftell(f);
 	printf("%s\n", name);
 
+	fgets(name, NAME_LENGTH, f);
 	fseek(f, positionThen-positionNow, SEEK_CUR);
-	printf("%ld\n", ftell(f)); 
-	fseek(f, 124, SEEK_CUR);
-	fgets(size, 12, f);
-	size[12] = 0;
-	printf("%s\n", size);
-	return NULL;
-}
+
+	printf("pozice od zacatku souboru: %ld\n", ftell(f)); 
+	fseek(f, SIZE_LOCATION, SEEK_CUR);
+	fgets(sizeStr, SIZE_LENGTH, f);
+
+	int size = octToDec(sizeStr);
+	printf("%d\n", size);
+	return 0;
+} 
 
 void listFiles(char *fileName){
-	char name[100];
 
 	FILE *f = fopen(fileName, "r");
+
 	if(f == NULL)
 		err(1, "ERROR: ");
 
-	//fgets(name, 100, f);
-	
-	//while(f != NULL)
-		listFileAndJump(f);	
+	int fileRead = 1;
+	while(fileRead)
+		fileRead = listFileAndJump(f);	
 
 	fclose(f);
 
 }
 
 void HandleOptions(int argc, char *argv[]){
+	char fileName[PATH_MAX];
+	int list = 0;
+
 	if(argc == 1)
 		errx(1, "Tar needs arguments");
 
-	char fileName[100];
-	int list = 0;
 
 	for(int i = 1; i < argc; i++){
-
 		if(!strcmp(argv[i], "-f")){                      //FILENAME 
 			i++; //next argument should be fileName 
-			if(i == argc){
+			if(i == argc)
 				errx(1, "Missing filename");
-			}
+
 			strcpy(fileName, argv[i]);
 			printf("filename: %s\n", fileName);
 		}
