@@ -1,15 +1,24 @@
 #include <stdio.h>
+#include <err.h>
 
+void HandleOptions(int argc, char *argv[]){
+	if(argc == 1)
+		errx(1, "Tar needs arguments");
+	printf("%d \n", argc);
+	for(int i = 0; i < argc; i++){
+		printf("%s\n", argv[i]);
+	}
+}
 
 int main(int argc, char *argv[]){
 
-	FILE *f;
-	if((f= fopen("neco.tar", "r")) == NULL) printf("chyba\n");
-	char name[100];
-	
-	for(int i; i < 100; i++) name[i] = 0;
+	HandleOptions(argc, argv);
 
-	//fscanf(f, "%[^\0]", name);
+	char name[100];
+	FILE *f = fopen("neco.tar", "r");
+	if(f == NULL)
+		err(1, "ERROR: ");
+
 	fgets(name, 100, f);
 	fclose(f);
 
