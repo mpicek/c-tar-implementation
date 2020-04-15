@@ -1,10 +1,17 @@
+/*
+Author Martin Picek
+
+Notes:
+	Blocking size is ignored - it is set to 20 by default
+	https://www.gnu.org/software/tar/manual/html_node/Blocking-Factor.html
+*/
+
 #include <stdio.h>
 #include <err.h>
 #include <string.h>
 
 void listFiles(char *fileName){
 	char name[100];
-	int i = 0;
 
 	FILE *f = fopen(fileName, "r");
 	if(f == NULL)
@@ -46,6 +53,5 @@ void HandleOptions(int argc, char *argv[]){
 int main(int argc, char *argv[]){
 
 	HandleOptions(argc, argv);
-
 	return 0;
 }
