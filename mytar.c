@@ -13,6 +13,7 @@ Notes:
 #include <stdio.h>
 #include <err.h>
 #include <string.h>
+#include <stdlib.h>
 
 // NAME_MAX ... max length of component in a path (i.e. filenames, dir names)
 // PATH_MAX ... max length of the whole path to a filename (all components)
@@ -22,6 +23,14 @@ Notes:
 #define SIZE_LENGTH 12
 #define SIZE_LOCATION 124
 #define MULTIPLE 512
+
+struct files_to_print{
+    int number;
+    int defined;
+    int argc;
+    int deleted;
+    char **filenames;
+};
 
 int octToDec(char* str){
 	int result = 0;
@@ -33,7 +42,7 @@ int octToDec(char* str){
 }
 
 
-int listFileAndJump(FILE* f){
+int listFileAndJump(FILE* f, struct files_to_print ftprint){
 	/* returns 1 when reads file, 0 when there is no file*/
 	char name[NAME_LENGTH];
 	char sizeStr[SIZE_LENGTH];
@@ -42,14 +51,35 @@ int listFileAndJump(FILE* f){
 	//NAME
 	fgets(name, NAME_LENGTH, f);
 	long positionNow = ftell(f);
-	fseek(f, positionThen-positionNow, SEEK_CUR);
-	fseek(f, SIZE_LOCATION, SEEK_CUR);
+	if(fseek(f, positionThen-positionNow, SEEK_CUR) != 0){
+	    err(2, "Unexpected End Of File\n");
+	}
+    if(fseek(f, SIZE_LOCATION, SEEK_CUR) != 0){
+        err(2, "Unexpected End Of File\n");
+    }
 	if(name[0] == 0) return 0;
-	printf("%s\n", name);
+	if(ftprint.defined){
+        for (int i = 0; i < ftprint.number; ++i) {
+            //printf("VIDIM: %s ... HLEDAM: %s \n", name, ftprint.filenames[i]);
+            if(!strcmp(ftprint.filenames[i], name)){
+                printf("%s\n", name);
+                ftprint.filenames[i][0] = '\0';
+                ftprint.deleted++;
+                break;
+            }
+        }
+	}
+	else{
+        printf("%s\n", name);
+	}
+
+
 
 	//SIZE
 	fgets(sizeStr, SIZE_LENGTH, f);
-	fseek(f,-SIZE_LOCATION - SIZE_LENGTH + 1, SEEK_CUR);
+    if(fseek(f,-SIZE_LOCATION - SIZE_LENGTH + 1, SEEK_CUR != 0)){
+        err(2, "Unexpected End Of File\n");
+    }
 
 	int size = octToDec(sizeStr);
 	//printf("%d\n", size);
@@ -62,7 +92,7 @@ int listFileAndJump(FILE* f){
 	return 1;
 } 
 
-void listFiles(char *fileName){
+void listFiles(char *fileName, struct files_to_print ftprint){
 
 	if(fileName[0] == 0)
 		errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
@@ -75,7 +105,7 @@ void listFiles(char *fileName){
 
 	int fileRead = 1;
 	while(fileRead)
-		fileRead = listFileAndJump(f);	
+		fileRead = listFileAndJump(f, ftprint);
 
 	fclose(f);
 
@@ -86,6 +116,15 @@ void HandleOptions(int argc, char *argv[]){
 	int list = 0;
 	int file = 0;
 	int something = 0;
+	char last_option[30];
+	last_option[0] = '\0';
+	//char files_to_print[argc][PATH_MAX];//too much memory given - optimize later (TODO)
+    struct files_to_print ftprint;
+    ftprint.filenames = malloc(argc*sizeof(char*)); //allocate memory for an array of pointers pointing at filenames
+    ftprint.number = 0;
+    ftprint.deleted = 0;
+    ftprint.defined = 0;
+    ftprint.argc = argc;
 
 	if(argc == 1)
 		errx(1, "Tar needs arguments");
@@ -93,6 +132,7 @@ void HandleOptions(int argc, char *argv[]){
 
 	for(int i = 1; i < argc; i++){
 		if(!strcmp(argv[i], "-f")){                      //FILENAME 
+			strcpy(last_option, argv[i]);
 			file=1;
 			i++; //next argument should be fileName 
 			if(i == argc)
@@ -103,17 +143,34 @@ void HandleOptions(int argc, char *argv[]){
 		}
 
 		else if(!strcmp(argv[i], "-t")){                   //LIST
+			strcpy(last_option, argv[i]);
 			list = 1;
 			something = 1;
 		}
-		else
-			errx(1, "Unknown option: %s", argv[i]);
+		else{
+			if(!strcmp(last_option, "-t")){
+			    ftprint.defined = 1;
+			    ftprint.filenames[ftprint.number] = malloc(PATH_MAX*sizeof(char)); //allocate memory
+			    strcpy(ftprint.filenames[ftprint.number], argv[i]);
+			    ftprint.number++;
+			}
+			else errx(1, "Unknown option: %s", argv[i]); // UNKNOWN OPTION
+		}
 	}
 	if(list){
-		if(file)
-			listFiles(fileName);
-		else
-			errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
+		if(file) {
+            listFiles(fileName, ftprint);
+            if(ftprint.defined){ //kontrola, aby bylo vse vypsano, potom jeste dat do novy funkce
+                for (int i = 0; i < ftprint.number; ++i) {
+                    if(ftprint.filenames[i][0] != '\0'){
+                        errx(2, "Couldn't find this file: %s", ftprint.filenames[i]);
+                    }
+                }
+            }
+        }
+		else {
+            errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
+        }
 	}
 	if(!something)
 		errx(1, "tar: You must specify one of the '-Acdtrux', '--delete' or '--test-label' options\nTry 'tar --help' or 'tar --usage' for more information.");
