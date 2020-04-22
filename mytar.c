@@ -4,6 +4,8 @@ Author Martin Picek
 Notes:
 	Blocking size is ignored - it is set to 20 by default
 	https://www.gnu.org/software/tar/manual/html_node/Blocking-Factor.html
+	end should be ended with two zero blocks - if not, it is silently ignored,
+		but if only one is missing, error occurs
 	numbers in tar header are octal numbers!! (8^n)
 	everything padded to the multiple of 512 (except the end - blocksize)
 */
@@ -107,11 +109,12 @@ void HandleOptions(int argc, char *argv[]){
 		else
 			errx(1, "Unknown option: %s", argv[i]);
 	}
-	if(list)
+	if(list){
 		if(file)
 			listFiles(fileName);
 		else
 			errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
+	}
 	if(!something)
 		errx(1, "tar: You must specify one of the '-Acdtrux', '--delete' or '--test-label' options\nTry 'tar --help' or 'tar --usage' for more information.");
 }
