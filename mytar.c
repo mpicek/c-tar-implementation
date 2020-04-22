@@ -62,11 +62,14 @@ int listFileAndJump(FILE* f){
 
 void listFiles(char *fileName){
 
+	if(fileName[0] == 0)
+		errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
+
 	FILE *f = fopen(fileName, "r");
 
 	//printf("%s\n", fileName);
 	if(f == NULL)
-		err(1, "ERROR: ");
+		err(1, "%s: Cannot open: No such file or directory\n Error is not recoverable: exiting now", fileName);
 
 	int fileRead = 1;
 	while(fileRead)
@@ -79,6 +82,8 @@ void listFiles(char *fileName){
 void HandleOptions(int argc, char *argv[]){
 	char fileName[PATH_MAX];
 	int list = 0;
+	int file = 0;
+	int something = 0;
 
 	if(argc == 1)
 		errx(1, "Tar needs arguments");
@@ -86,21 +91,29 @@ void HandleOptions(int argc, char *argv[]){
 
 	for(int i = 1; i < argc; i++){
 		if(!strcmp(argv[i], "-f")){                      //FILENAME 
+			file=1;
 			i++; //next argument should be fileName 
 			if(i == argc)
-				errx(1, "Missing filename");
+				errx(1, "tar: option requires an argument -- 'f'\nTry 'tar --help' or 'tar --usage' for more information.");
 
 			strcpy(fileName, argv[i]);
 		//	printf("filename: %s\n", fileName);
 		}
 
-		else if(!strcmp(argv[i], "-t"))                   //LIST
+		else if(!strcmp(argv[i], "-t")){                   //LIST
 			list = 1;
+			something = 1;
+		}
 		else
 			errx(1, "Unknown option: %s", argv[i]);
 	}
 	if(list)
-		listFiles(fileName);
+		if(file)
+			listFiles(fileName);
+		else
+			errx(1, "tar: Refusing to read archive contents from terminal (missing -f option?)\ntar: Error is not recoverable: exiting now");
+	if(!something)
+		errx(1, "tar: You must specify one of the '-Acdtrux', '--delete' or '--test-label' options\nTry 'tar --help' or 'tar --usage' for more information.");
 }
 
 int main(int argc, char *argv[]){
