@@ -142,6 +142,7 @@ void HandleOptions(int argc, char *argv[]){
 	last_option[0] = '\0';
 	//char files_to_print[argc][PATH_MAX];//too much memory given - optimize later (TODO)
 	//TODO uvolnit pamet!!
+	//TODO function na init
     struct files_to_print ftprint;
     ftprint.filenames = malloc(argc*sizeof(char*)); //allocate memory for an array of pointers pointing at filenames
     ftprint.number = 0;
@@ -207,7 +208,6 @@ void HandleOptions(int argc, char *argv[]){
 }
 
 int main(int argc, char *argv[]){
-
 	HandleOptions(argc, argv);
 	return 0;
 }
