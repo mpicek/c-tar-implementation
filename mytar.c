@@ -35,6 +35,14 @@ struct files_to_print{
     char **filenames;
 };
 
+void init_files_to_print(struct files_to_print *ftprint, int argc){
+    ftprint->filenames = malloc(argc*sizeof(char*)); //allocate memory for an array of pointers pointing at filenames
+    ftprint->number = 0;
+    ftprint->deleted = 0;
+    ftprint->defined = 0;
+    ftprint->argc = argc;
+}
+
 int octToDec(char* str){
 	int result = 0;
 	int i = 0;
@@ -156,14 +164,6 @@ void listFiles(char *fileName, struct files_to_print ftprint){
     }
 	fclose(f);
 
-}
-
-void init_files_to_print(struct files_to_print *ftprint, int argc){
-    ftprint->filenames = malloc(argc*sizeof(char*)); //allocate memory for an array of pointers pointing at filenames
-    ftprint->number = 0;
-    ftprint->deleted = 0;
-    ftprint->defined = 0;
-    ftprint->argc = argc;
 }
 
 void HandleOptions(int argc, char *argv[]){
