@@ -203,7 +203,8 @@ void HandleOptions(int argc, char *argv[]){
 	int file = 0; //indicates whether a user specified the file to operate on
 	int action_defined = 0; //whether there is any action defined
 
-    struct files_to_print ftprint; //when -t is defined and user wants to list only certain files, here they are stored
+	//when -t is defined and user wants to list only certain files, here they are stored
+    struct files_to_print ftprint; 
     init_files_to_print(&ftprint, argc);
 
 	if(argc == 1)
