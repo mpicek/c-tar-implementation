@@ -189,7 +189,7 @@ void list_files(char *fileName, struct files_to_print ftprint) {
   // if there is only one block at the end. When there are two, it is ok
   if (ftell(f) + MULTIPLE <= file_length &&
       ftell(f) + 2 * MULTIPLE > file_length) {
-    warnx("A lone zero block at 4");
+    warnx("A lone zero block at %ld", (ftell(f)+MULTIPLE)/MULTIPLE);
   }
 
   fclose(f);
