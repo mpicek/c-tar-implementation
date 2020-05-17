@@ -101,7 +101,7 @@ long long oct_to_dec(char *str) {
 }
 
 ///safe seeking in file
-void seek_in_file(FILE *f, long long offset, int relative_point, long long file_length) {
+void safe_seek(FILE *f, long long offset, int relative_point, long long file_length) {
   if (relative_point == SEEK_CUR) {
     long long current_offset = ftell(f);
     if (current_offset == -1){
@@ -127,7 +127,7 @@ void read_string(FILE *f, long long location, char str[], long long str_length,
     ftell_unsuccessful();
   }
 
-  seek_in_file(f, location, SEEK_CUR, file_length); // seek to location
+  safe_seek(f, location, SEEK_CUR, file_length); // seek to location
 
   if (fgets(str, str_length, f) == NULL) // read string
     unexp_EOF_err();
@@ -137,7 +137,7 @@ void read_string(FILE *f, long long location, char str[], long long str_length,
     ftell_unsuccessful();
   }
 
-  seek_in_file(f, (positionThen - positionNow), SEEK_CUR, file_length); // seek back
+  safe_seek(f, (positionThen - positionNow), SEEK_CUR, file_length); // seek back
 }
 
 void print_file(char name[], struct files_to_print ftprint) {
@@ -186,7 +186,7 @@ bool list_file_and_jump(FILE *f, struct files_to_print ftprint,
   // 1 stands for header (512B = MULTIPLE) and the rest makes the record aligned
   // to 512B
   long long jump = MULTIPLE * (1 + size / MULTIPLE + padding);
-  seek_in_file(f, jump, SEEK_CUR, file_length); // jump to the next record (if possible)
+  safe_seek(f, jump, SEEK_CUR, file_length); // jump to the next record (if possible)
   // if not possible, than don't jump (implemented in seek) and in next
   // iteration of this function the end of file will be detected
 
@@ -264,6 +264,17 @@ void option_t(int file, char fileName[], struct files_to_print ftprint) {
   }
 }
 
+void strcpy_unsuccessful(){
+  errx(2, "Internal error - can't use strcpy - destination is too small");
+}
+
+void safe_strcpy(char* dest, long long dest_len, char* source, long long source_len){
+  if(dest_len >= source_len)
+    strcpy(dest, source);
+  else
+    strcpy_unsuccessful();
+}
+
 void handle_options(int argc, char *argv[]) {
   char fileName[PATH_MAX];
   bool list = false; // indicates whether -t option was used
@@ -287,7 +298,8 @@ void handle_options(int argc, char *argv[]) {
         errx(2, "tar: option requires an argument -- 'f'\nTry 'tar --help' or "
                 "'tar --usage' for more information.");
 
-      strcpy(fileName, argv[i]);
+      safe_strcpy(fileName, sizeof(fileName), argv[i], sizeof(argv[i]));
+
     } else if (!strcmp(argv[i], "-t")) { // LIST
       list = true;
       action_defined = true;
@@ -300,7 +312,7 @@ void handle_options(int argc, char *argv[]) {
         if(ftprint.filenames[ftprint.number] == NULL){
           malloc_unsuccessful();
         }
-        strcpy(ftprint.filenames[ftprint.number], argv[i]);
+        safe_strcpy(ftprint.filenames[ftprint.number], sizeof(ftprint.filenames[ftprint.number]), argv[i], sizeof(argv[i]));
         ftprint.number++;
       } else
         //errx(2, "Unknown option.");
