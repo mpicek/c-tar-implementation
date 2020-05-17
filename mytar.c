@@ -36,6 +36,27 @@ struct files_to_print {
   char **filenames;
 };
 
+void malloc_unsuccessful(){
+  errx(2, "Internal error - malloc unsuccessful");
+}
+
+void unexp_EOF_err() {
+  warnx("Unexpected EOF in archive");
+  errx(2, "Error is not recoverable: exiting now");
+}
+
+void ftell_unsuccessful(){
+  errx(2, "Internal error - ftell unsuccessful");
+}
+
+void fseek_unsuccessful(){
+  errx(2, "Internal error - fseek unsuccessful");
+}
+
+void fclose_unsuccessful(){
+  errx(2, "Internal error - fclose unsuccessful");
+}
+
 void check_printed_files(struct files_to_print ftprint) {
   if (ftprint.defined) {
     bool found_all = true;
@@ -55,6 +76,9 @@ void init_files_to_print(struct files_to_print *ftprint, int argc) {
   ftprint->filenames =
       malloc(argc * sizeof(char *)); // allocate memory for an array of pointers
                                      // pointing at filenames
+  if(ftprint->filenames == NULL){ //check success of malloc()
+    malloc_unsuccessful();
+  }
   ftprint->number = 0;
   ftprint->defined = 0;
   ftprint->argc = argc;
@@ -62,13 +86,13 @@ void init_files_to_print(struct files_to_print *ftprint, int argc) {
 
 void deallocate_files_to_print(struct files_to_print *ftprint) {
   for(int i = 0; i < ftprint->number; i++){
-    free(ftprint->filenames[i]);
+    free(ftprint->filenames[i]); //free memory for each filename
   }
-  free(ftprint->filenames);
+  free(ftprint->filenames); //free memory for array of pointers for filenames
 }
 
-size_t octToDec(char *str) {
-  size_t result = 0;
+long long oct_to_dec(char *str) {
+  long long result = 0;
   int i = 0;
   while (str[i])
     result = 8 * (result + str[i++] - '0');
@@ -76,17 +100,18 @@ size_t octToDec(char *str) {
   return result / 8;
 }
 
-void unexp_EOF_err() {
-  warnx("Unexpected EOF in archive");
-  errx(2, "Error is not recoverable: exiting now");
-}
-
-void seek(FILE *f, int offset, int relative_point, int file_length) {
+///safe seeking in file
+void seek_in_file(FILE *f, long long offset, int relative_point, long long file_length) {
   if (relative_point == SEEK_CUR) {
-    if (ftell(f) + offset > file_length) {
+    long long current_offset = ftell(f);
+    if (current_offset == -1){
+      ftell_unsuccessful();
+    }
+    if (current_offset + offset > file_length) {
       unexp_EOF_err();
     } else {
-      if (fseek(f, offset, relative_point) != 0) { // back
+      //successful fseek returns 0:
+      if (fseek(f, offset, relative_point) != 0) { 
         unexp_EOF_err();
       }
     }
@@ -94,19 +119,25 @@ void seek(FILE *f, int offset, int relative_point, int file_length) {
 }
 
 /// reads string from file and returns to the original position
-void read_string(FILE *f, int location, char str[], int str_length,
-                 int file_length) {
+void read_string(FILE *f, long long location, char str[], long long str_length,
+                 long long file_length) {
 
-  long positionThen = ftell(f); // position at the beginning of the process
+  long long positionThen = ftell(f); // position at the beginning of the process
+  if(positionThen == -1){
+    ftell_unsuccessful();
+  }
 
-  seek(f, location, SEEK_CUR, file_length); // seek to location
+  seek_in_file(f, location, SEEK_CUR, file_length); // seek to location
 
   if (fgets(str, str_length, f) == NULL) // read string
     unexp_EOF_err();
 
-  long positionNow = ftell(f); // get current position
+  long long positionNow = ftell(f); // get current position
+  if(positionNow == -1){
+    ftell_unsuccessful();
+  }
 
-  seek(f, positionThen - positionNow, SEEK_CUR, file_length); // seek back
+  seek_in_file(f, (positionThen - positionNow), SEEK_CUR, file_length); // seek back
 }
 
 void print_file(char name[], struct files_to_print ftprint) {
@@ -126,8 +157,8 @@ void print_file(char name[], struct files_to_print ftprint) {
 }
 
 /// returns 1 when reads file, 0 when there is no file
-int list_file_and_jump(FILE *f, struct files_to_print ftprint,
-                       int file_length) {
+bool list_file_and_jump(FILE *f, struct files_to_print ftprint,
+                       long long file_length) {
   char name[NAME_LENGTH];
   char sizeStr[SIZE_LENGTH];
   char typeflag[TYPEFLAG_LENGTH]; // typeflag and and of string (\0)
@@ -141,31 +172,38 @@ int list_file_and_jump(FILE *f, struct files_to_print ftprint,
   }
 
   if (name[0] == 0)
-    return 0; // when this is an empty block at the end of the .tar file
+    return false; // when this is an empty block at the end of the .tar file
 
   print_file(name, ftprint);
 
   read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
 
-  size_t size = octToDec(sizeStr);
+  long long size = oct_to_dec(sizeStr);
 
-  int padding = 0;
+  long long padding = 0;
   if (size % MULTIPLE)
     padding = 1; // file ends somewhere in the middle of a block
   // 1 stands for header (512B = MULTIPLE) and the rest makes the record aligned
   // to 512B
-  int jump = MULTIPLE * (1 + size / MULTIPLE + padding);
-  seek(f, jump, SEEK_CUR, file_length); // jump to the next record (if possible)
+  long long jump = MULTIPLE * (1 + size / MULTIPLE + padding);
+  seek_in_file(f, jump, SEEK_CUR, file_length); // jump to the next record (if possible)
   // if not possible, than don't jump (implemented in seek) and in next
   // iteration of this function the end of file will be detected
 
-  return 1;
+  return true;
 }
 
-int get_file_length(FILE *f) {
-  fseek(f, 0, SEEK_END);
-  int file_length = ftell(f);
-  fseek(f, 0, SEEK_SET);
+long long get_file_length(FILE *f) {
+  if(fseek(f, 0, SEEK_END) != 0){
+    fseek_unsuccessful();
+  }
+  long long file_length = ftell(f);
+  if(file_length == -1){
+    ftell_unsuccessful();
+  }
+  if(fseek(f, 0, SEEK_SET) != 0){
+    fseek_unsuccessful();
+  }
   return file_length;
 }
 
@@ -176,30 +214,42 @@ void list_files(char *fileName, struct files_to_print ftprint) {
             "option?)\ntar: Error is not recoverable: exiting now");
 
   FILE *f = fopen(fileName, "r");
-  int file_length = get_file_length(f);
-
   if (f == NULL)
     errx(2,
          "%s: Cannot open: No such file or directory\n Error is not "
          "recoverable: exiting now",
          fileName);
+  long long file_length = get_file_length(f);
 
-  int fileRead = 1;
+
+  bool fileRead = true;
   while (fileRead) {
     fileRead = list_file_and_jump(f, ftprint, file_length);
-    if (ftell(f) == file_length) { // when we are at the end of the file, it
+    long long current_offset = ftell(f);
+    
+    if (current_offset == -1){
+      ftell_unsuccessful();
+    }
+    else if (current_offset == file_length) { // when we are at the end of the file, it
                                    // means that two blocks are missing
+      deallocate_files_to_print(&ftprint);
       exit(0);
     }
   }
-
-  // if there is only one block at the end. When there are two, it is ok
-  if (ftell(f) + MULTIPLE <= file_length &&
-      ftell(f) + 2 * MULTIPLE > file_length) {
-    warnx("A lone zero block at %ld", (ftell(f)+MULTIPLE)/MULTIPLE);
+  long long current_offset = ftell(f);
+  if (current_offset == -1){
+    ftell_unsuccessful();
   }
 
-  fclose(f);
+  // if there is only one block at the end. When there are two, it is ok
+  if (current_offset + MULTIPLE <= file_length &&
+      current_offset + 2 * MULTIPLE > file_length) {
+    warnx("A lone zero block at %lld", (current_offset+MULTIPLE)/MULTIPLE);
+  }
+
+  if(fclose(f) == EOF){
+    fclose_unsuccessful();
+  }
 }
 
 void option_t(int file, char fileName[], struct files_to_print ftprint) {
@@ -214,7 +264,7 @@ void option_t(int file, char fileName[], struct files_to_print ftprint) {
   }
 }
 
-void HandleOptions(int argc, char *argv[]) {
+void handle_options(int argc, char *argv[]) {
   char fileName[PATH_MAX];
   bool list = false; // indicates whether -t option was used
   bool file = false; // indicates whether a user specified the file to operate on
@@ -247,6 +297,9 @@ void HandleOptions(int argc, char *argv[]) {
         ftprint.defined = 1;
         ftprint.filenames[ftprint.number] =
             malloc(PATH_MAX * sizeof(char)); // allocate memory
+        if(ftprint.filenames[ftprint.number] == NULL){
+          malloc_unsuccessful();
+        }
         strcpy(ftprint.filenames[ftprint.number], argv[i]);
         ftprint.number++;
       } else
@@ -269,6 +322,6 @@ void HandleOptions(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  HandleOptions(argc, argv);
+  handle_options(argc, argv);
   return 0;
 }
