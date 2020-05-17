@@ -67,8 +67,8 @@ void deallocate_files_to_print(struct files_to_print *ftprint) {
   free(ftprint->filenames);
 }
 
-int octToDec(char *str) {
-  int result = 0;
+size_t octToDec(char *str) {
+  size_t result = 0;
   int i = 0;
   while (str[i])
     result = 8 * (result + str[i++] - '0');
@@ -147,7 +147,7 @@ int list_file_and_jump(FILE *f, struct files_to_print ftprint,
 
   read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
 
-  int size = octToDec(sizeStr);
+  size_t size = octToDec(sizeStr);
 
   int padding = 0;
   if (size % MULTIPLE)
