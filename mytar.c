@@ -30,7 +30,7 @@ blocksize)
 #define REGULAR_FILE_FLAG 0
 
 struct files_to_print {
-  int number;
+  int number; //number of files to be listed
   int defined;
   int argc;
   char **filenames;
@@ -38,10 +38,10 @@ struct files_to_print {
 
 void check_printed_files(struct files_to_print ftprint) {
   if (ftprint.defined) {
-    int found_all = 1;
+    bool found_all = true;
     for (int i = 0; i < ftprint.number; ++i) {
       if (ftprint.filenames[i][0] != '\0') {
-        found_all = 0;
+        found_all = false;
         warnx("%s: Not found in archive", ftprint.filenames[i]);
       }
     }
@@ -58,6 +58,13 @@ void init_files_to_print(struct files_to_print *ftprint, int argc) {
   ftprint->number = 0;
   ftprint->defined = 0;
   ftprint->argc = argc;
+}
+
+void deallocate_files_to_print(struct files_to_print *ftprint) {
+  for(int i = 0; i < ftprint->number; i++){
+    free(ftprint->filenames[i]);
+  }
+  free(ftprint->filenames);
 }
 
 int octToDec(char *str) {
@@ -256,6 +263,9 @@ void HandleOptions(int argc, char *argv[]) {
             "'--test-label' options\nTry 'tar --help' or 'tar --usage' for "
             "more information.");
   }
+
+  deallocate_files_to_print(&ftprint);
+
 }
 
 int main(int argc, char *argv[]) {
