@@ -25,11 +25,11 @@ blocksize)
 #define SIZE_LENGTH 12
 #define SIZE_LOCATION 124
 #define TYPEFLAG_LOCATION 156
-#define TYPEFLAG_LENGTH 1
+#define TYPEFLAG_LENGTH 2
 #define MULTIPLE 512
 #define REGULAR_FILE_FLAG 0
 
-struct files_to_print {
+struct files_to_process {
   int number; // number of files to be listed
   int defined;
   int argc;
@@ -43,13 +43,19 @@ void unexp_EOF_err() {
   errx(2, "Error is not recoverable: exiting now");
 }
 
+void more_than_one_action_argument_err() {
+  errx(2, "You may not specify more than one \'-Acdtrux\', \'--delete\' or "
+  "\'--test-label\' option\nTry \'tar --help\' or \'tar --usage\' "
+  "for more information.");
+}
+
 void ftell_unsuccessful() { errx(2, "Internal error - ftell unsuccessful"); }
 
 void fseek_unsuccessful() { errx(2, "Internal error - fseek unsuccessful"); }
 
 void fclose_unsuccessful() { errx(2, "Internal error - fclose unsuccessful"); }
 
-void check_printed_files(struct files_to_print ftprint) {
+void check_printed_files(struct files_to_process ftprint) {
   if (ftprint.defined) {
     bool found_all = true;
     for (int i = 0; i < ftprint.number; ++i) {
@@ -64,7 +70,7 @@ void check_printed_files(struct files_to_print ftprint) {
   }
 }
 
-void init_files_to_print(struct files_to_print *ftprint, int argc) {
+void init_files_to_process(struct files_to_process *ftprint, int argc) {
   ftprint->filenames =
       malloc(argc * sizeof(char *)); // allocate memory for an array of pointers
                                      // pointing at filenames
@@ -76,7 +82,7 @@ void init_files_to_print(struct files_to_print *ftprint, int argc) {
   ftprint->argc = argc;
 }
 
-void deallocate_files_to_print(struct files_to_print *ftprint) {
+void deallocate_files_to_process(struct files_to_process *ftprint) {
   for (int i = 0; i < ftprint->number; i++) {
     free(ftprint->filenames[i]); // free memory for each filename
   }
@@ -89,8 +95,7 @@ long long oct_to_dec(char *str) {
   while (str[i])
     result = 8 * (result + str[i++] - '0');
 
-  return result / 8;
-}
+  return result / 8; }
 
 /// safe seeking in file
 void safe_seek(FILE *f, long long offset, int relative_point,
@@ -134,7 +139,17 @@ void read_string(FILE *f, long long location, char str[], long long str_length,
             file_length); // seek back
 }
 
-void print_file(char name[], struct files_to_print ftprint) {
+// saves name of the current file to name[]
+void get_name_of_file(FILE *f, char name[], long long file_length){
+  read_string(f, NAME_LOCATION, name, NAME_LENGTH, file_length); // read NAME
+}
+
+void get_flag_of_file(FILE *f, char typeflag[], long long file_length){
+  read_string(f, TYPEFLAG_LOCATION, typeflag, 
+        TYPEFLAG_LENGTH, file_length); // read TYPEFLAG
+} 
+
+void print_file(char name[], struct files_to_process ftprint) {
   if (ftprint.defined) {
     for (int i = 0; i < ftprint.number; ++i) {
       if (!strcmp(ftprint.filenames[i], name)) {
@@ -151,14 +166,16 @@ void print_file(char name[], struct files_to_print ftprint) {
 }
 
 /// returns 1 when reads file, 0 when there is no file
-bool list_file_and_jump(FILE *f, struct files_to_print ftprint,
+bool list_file_and_jump(FILE *f, struct files_to_process ftprint,
                         long long file_length) {
   char name[NAME_LENGTH];
   char sizeStr[SIZE_LENGTH];
   char typeflag[TYPEFLAG_LENGTH]; // typeflag and and of string (\0)
 
-  read_string(f, NAME_LOCATION, name, NAME_LENGTH, file_length); // read NAME
-  read_string(f, TYPEFLAG_LOCATION, typeflag, 2, file_length); // read TYPEFLAG
+  get_name_of_file(f, name, file_length);
+  get_flag_of_file(f, typeflag, file_length);
+  //read_string(f, NAME_LOCATION, name, NAME_LENGTH, file_length); // read NAME
+  //read_string(f, TYPEFLAG_LOCATION, typeflag, 2, file_length); // read TYPEFLAG
 
   // when it is not regular file but there is file (name[0] != 0)
   if ((typeflag[0] - '0' != REGULAR_FILE_FLAG) && (name[0] != 0)) {
@@ -188,6 +205,7 @@ bool list_file_and_jump(FILE *f, struct files_to_print ftprint,
   return true;
 }
 
+// returns size of the WHOLE tar file
 long long get_file_length(FILE *f) {
   if (fseek(f, 0, SEEK_END) != 0) {
     fseek_unsuccessful();
@@ -202,7 +220,7 @@ long long get_file_length(FILE *f) {
   return file_length;
 }
 
-void list_files(char *fileName, struct files_to_print ftprint) {
+void list_files(char *fileName, struct files_to_process ftprint) {
 
   if (fileName[0] == 0)
     errx(2, "tar: Refusing to read archive contents from terminal (missing -f "
@@ -226,7 +244,7 @@ void list_files(char *fileName, struct files_to_print ftprint) {
     } else if (current_offset ==
                file_length) { // when we are at the end of the file, it
                               // means that two blocks are missing
-      deallocate_files_to_print(&ftprint);
+      deallocate_files_to_process(&ftprint);
       exit(0);
     }
   }
@@ -246,13 +264,29 @@ void list_files(char *fileName, struct files_to_print ftprint) {
   }
 }
 
-void option_t(int file, char fileName[], struct files_to_print ftprint) {
+void extract_files(char *fileName, struct files_to_process ftprint, 
+                 bool verbose){
+
+}
+
+void option_t(bool file, char fileName[], struct files_to_process ftprint) {
   if (file) {                      // if user defined .tar file
     list_files(fileName, ftprint); // list the files
     fflush(stdout);
     check_printed_files(
         ftprint); // if all files specified (if specified) have been printed
   } else {
+    errx(2, "tar: Refusing to read archive contents from terminal (missing -f "
+            "option?)\ntar: Error is not recoverable: exiting now");
+  }
+}
+
+void option_x(bool file, char fileName[], struct files_to_process ftprint, 
+            bool verbose){
+  if(file){
+    extract_files(fileName, ftprint, verbose);
+    fflush(stdout);
+  } else{
     errx(2, "tar: Refusing to read archive contents from terminal (missing -f "
             "option?)\ntar: Error is not recoverable: exiting now");
   }
@@ -273,14 +307,16 @@ void safe_strcpy(char *dest, long long dest_len, char *source,
 void handle_options(int argc, char *argv[]) {
   char fileName[PATH_MAX];
   bool list = false; // indicates whether -t option was used
+  bool extract = false; // indicates whether -x option was used
+  bool verbose = false; // indicates whether -v option was used
   bool file =
       false; // indicates whether a user specified the file to operate on
   bool action_defined = false; // whether there is any action defined
 
   // when -t is defined and user wants to list only certain files, here they are
   // stored
-  struct files_to_print ftprint;
-  init_files_to_print(&ftprint, argc);
+  struct files_to_process ftprint;
+  init_files_to_process(&ftprint, argc);
 
   if (argc == 1)
     errx(2, "Tar needs arguments");
@@ -290,18 +326,25 @@ void handle_options(int argc, char *argv[]) {
     if (!strcmp(argv[i], "-f")) { // FILENAME
       file = true;
       i++; // next argument should be fileName
-      if (i == argc)
+      if (i == argc){
         errx(2, "tar: option requires an argument -- 'f'\nTry 'tar --help' or "
                 "'tar --usage' for more information.");
+      }
 
       safe_strcpy(fileName, sizeof(fileName), argv[i], sizeof(argv[i]));
 
     } else if (!strcmp(argv[i], "-t")) { // LIST
       list = true;
       action_defined = true;
+    } else if (!strcmp(argv[i], "-x")){ // EXTRACT
+      extract = true;
+      action_defined = true;
+    } else if (!strcmp(argv[i], "-v")){ // VERBOSE
+      verbose = true;
+      action_defined = true;
     } else {      // OTHER OPTION OR FILENAME
-      if (list) { // if list is defined, than the next option is the file to be
-                  // listed
+      if (list || extract) { // if list or extract defined
+                  //than the next option is the file to be listed/extracted
         ftprint.defined = 1;
         ftprint.filenames[ftprint.number] =
             malloc(PATH_MAX * sizeof(char)); // allocate memory
@@ -317,17 +360,24 @@ void handle_options(int argc, char *argv[]) {
         exit(2); // UNKNOWN OPTION
     }
   }
-
-  if (list) {
-    option_t(file, fileName, ftprint);
+  
+  if(list && extract){
+    more_than_one_action_argument_err(); 
+  } else {
+    if (list) {
+      option_t(file, fileName, ftprint);
+    }
+    else if (extract){
+      option_x(file, fileName, ftprint, verbose);
+    }
+    if (!action_defined) {
+      errx(2, "tar: You must specify one of the '-Acdtrux', '--delete' or "
+              "'--test-label' options\nTry 'tar --help' or 'tar --usage' for "
+              "more information.");
+    }
   }
-  if (!action_defined) {
-    errx(2, "tar: You must specify one of the '-Acdtrux', '--delete' or "
-            "'--test-label' options\nTry 'tar --help' or 'tar --usage' for "
-            "more information.");
-  }
 
-  deallocate_files_to_print(&ftprint);
+  deallocate_files_to_process(&ftprint);
 }
 
 int main(int argc, char *argv[]) {
