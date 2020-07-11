@@ -98,8 +98,7 @@ long long oct_to_dec(char *str) {
   return result / 8; }
 
 /// safe seeking in file
-void safe_seek(FILE *f, long long offset, int relative_point,
-               long long file_length) {
+void safe_seek(FILE *f, long long offset, int relative_point,long long file_length) {
   if (relative_point == SEEK_CUR) {
     long long current_offset = ftell(f);
     if (current_offset == -1) {
@@ -117,8 +116,7 @@ void safe_seek(FILE *f, long long offset, int relative_point,
 }
 
 /// reads string from file and returns to the original position
-void read_string(FILE *f, long long location, char str[], long long str_length,
-                 long long file_length) {
+void read_string(FILE *f, long long location, char str[], long long str_length, long long file_length) {
 
   long long positionThen = ftell(f); // position at the beginning of the process
   if (positionThen == -1) {
@@ -149,13 +147,18 @@ void get_flag_of_file(FILE *f, char typeflag[], long long file_length){
         TYPEFLAG_LENGTH, file_length); // read TYPEFLAG
 } 
 
-void print_file(char name[], struct files_to_process ftprint) {
+void get_size_of_file(FILE *f, char sizeStr[], long long file_length){
+  read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
+}
+
+void print_file(char name[], struct files_to_process ftprint, bool delete_from_files_to_process) {
   if (ftprint.defined) {
     for (int i = 0; i < ftprint.number; ++i) {
-      if (!strcmp(ftprint.filenames[i], name)) {
+      if (strcmp(ftprint.filenames[i], name) == 0) {
         printf("%s\n", name);
         fflush(stdout);
-        ftprint.filenames[i][0] = '\0'; // it means the file is printed
+        if(delete_from_files_to_process)
+          ftprint.filenames[i][0] = '\0'; // it means the file is printed
         break;
       }
     }
@@ -166,16 +169,13 @@ void print_file(char name[], struct files_to_process ftprint) {
 }
 
 /// returns 1 when reads file, 0 when there is no file
-bool list_file_and_jump(FILE *f, struct files_to_process ftprint,
-                        long long file_length) {
+bool list_file_and_jump(FILE *f, struct files_to_process ftprint, long long file_length) {
   char name[NAME_LENGTH];
   char sizeStr[SIZE_LENGTH];
   char typeflag[TYPEFLAG_LENGTH]; // typeflag and and of string (\0)
 
   get_name_of_file(f, name, file_length);
   get_flag_of_file(f, typeflag, file_length);
-  //read_string(f, NAME_LOCATION, name, NAME_LENGTH, file_length); // read NAME
-  //read_string(f, TYPEFLAG_LOCATION, typeflag, 2, file_length); // read TYPEFLAG
 
   // when it is not regular file but there is file (name[0] != 0)
   if ((typeflag[0] - '0' != REGULAR_FILE_FLAG) && (name[0] != 0)) {
@@ -185,9 +185,10 @@ bool list_file_and_jump(FILE *f, struct files_to_process ftprint,
   if (name[0] == 0)
     return false; // when this is an empty block at the end of the .tar file
 
-  print_file(name, ftprint);
+  print_file(name, ftprint, true);
 
-  read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
+  //read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
+  get_size_of_file(f, sizeStr, file_length);
 
   long long size = oct_to_dec(sizeStr);
 
@@ -206,7 +207,7 @@ bool list_file_and_jump(FILE *f, struct files_to_process ftprint,
 }
 
 // returns size of the WHOLE tar file
-long long get_file_length(FILE *f) {
+long long get_tar_file_length(FILE *f) {
   if (fseek(f, 0, SEEK_END) != 0) {
     fseek_unsuccessful();
   }
@@ -225,14 +226,15 @@ void list_files(char *fileName, struct files_to_process ftprint) {
   if (fileName[0] == 0)
     errx(2, "tar: Refusing to read archive contents from terminal (missing -f "
             "option?)\ntar: Error is not recoverable: exiting now");
-
   FILE *f = fopen(fileName, "r");
   if (f == NULL)
     errx(2,
          "%s: Cannot open: No such file or directory\n Error is not "
          "recoverable: exiting now",
          fileName);
-  long long file_length = get_file_length(f);
+
+  //open_file(f, fileName);
+  long long file_length = get_tar_file_length(f);
 
   bool fileRead = true;
   while (fileRead) {
@@ -264,9 +266,174 @@ void list_files(char *fileName, struct files_to_process ftprint) {
   }
 }
 
+//TODO: verbose
+void create_and_extract_to_file(FILE *f, char name[], long long size, 
+              long long file_length, struct files_to_process ftprint){
+  long long positionThen = ftell(f); // position at the beginning of the process
+  if (positionThen == -1) {
+    ftell_unsuccessful();
+  }
+
+  if(ftprint.defined){
+    bool file_in_ftprint = false;
+    for (int i = 0; i < ftprint.number; ++i) {
+      if (!strcmp(ftprint.filenames[i], name)) {
+        file_in_ftprint = true;
+        ftprint.filenames[i][0] = '\0'; // it means the file is processed
+        break;
+      }
+    }
+
+    if(!file_in_ftprint)
+      return;
+
+    //create new file
+    FILE *extracted_file;
+    extracted_file = fopen(name, "w");
+    if(extracted_file == NULL)
+      errx(2,
+         "%s: Cannot open: No such file or directory\n Error is not "
+         "recoverable: exiting now",
+         name);
+
+    safe_seek(f, MULTIPLE, SEEK_CUR, file_length); // skip header
+
+    for(int i = 0; i < size; i++){
+      int one_byte;
+      one_byte = fgetc(f);
+      if(one_byte == EOF)
+        unexp_EOF_err();
+      int is_error = fputc((char)one_byte, extracted_file);
+      if(is_error == EOF)
+        unexp_EOF_err(); ///TODO: /////////////////////////////////////////// SPATNEJ ERROR MA
+         ////////////////////////////////////////////////BYT ERROR ZAPISU
+    }
+    long long positionNow = ftell(f); // get current position
+    if (positionNow == -1) {
+      ftell_unsuccessful();
+    }
+    safe_seek(f, (positionThen - positionNow), SEEK_CUR,
+            file_length); // seek back
+
+  } else{
+    //proste to udelat - vytvorit soubor atd
+    //////////////////////////////////////////////////////////ZKOPIROVAN HOREJSEK - ZLEPSIT
+    //create new file
+    FILE *extracted_file;
+    extracted_file = fopen(name, "w");
+    if(extracted_file == NULL)
+      errx(2,
+         "%s: Cannot open: No such file or directory\n Error is not "
+         "recoverable: exiting now",
+         name);
+
+    safe_seek(f, MULTIPLE, SEEK_CUR, file_length); // skip header
+
+    for(int i = 0; i < size; i++){
+      int one_byte;
+      one_byte = fgetc(f);
+      if(one_byte == EOF)
+        unexp_EOF_err();
+      int is_error = fputc((char)one_byte, extracted_file);
+      if(is_error == EOF)
+        unexp_EOF_err(); ///TODO: /////////////////////////////////////////// SPATNEJ ERROR MA
+         ////////////////////////////////////////////////BYT ERROR ZAPISU
+    }
+    long long positionNow = ftell(f); // get current position
+    if (positionNow == -1) {
+      ftell_unsuccessful();
+    }
+    safe_seek(f, (positionThen - positionNow), SEEK_CUR,
+            file_length); // seek back
+  }
+}
+
+/// returns 1 when reads file, 0 when there is no file
+bool extract_file_and_jump(FILE *f, struct files_to_process ftprint,
+                        long long file_length, bool verbose) {
+  char name[NAME_LENGTH];
+  char sizeStr[SIZE_LENGTH];
+  char typeflag[TYPEFLAG_LENGTH]; // typeflag and end of string (\0)
+
+  get_name_of_file(f, name, file_length);
+  get_flag_of_file(f, typeflag, file_length);
+
+  // when it is not regular file but there is file (name[0] != 0)
+  if ((typeflag[0] - '0' != REGULAR_FILE_FLAG) && (name[0] != 0)) {
+    errx(2, "Unsupported header type: %d", typeflag[0]);
+  }
+
+  if (name[0] == 0)
+    return false; // when this is an empty block at the end of the .tar file
+
+  if(verbose)
+    print_file(name, ftprint, false);
+
+  //read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
+  get_size_of_file(f, sizeStr, file_length);
+  long long size = oct_to_dec(sizeStr);
+
+  create_and_extract_to_file(f, name, size, file_length, ftprint);
+
+  long long padding = 0;
+  if (size % MULTIPLE)
+    padding = 1; // file ends somewhere in the middle of a block
+  // 1 stands for header (512B = MULTIPLE) and the rest makes the record aligned
+  // to 512B
+  long long jump = MULTIPLE * (1 + size / MULTIPLE + padding);
+  safe_seek(f, jump, SEEK_CUR,
+            file_length); // jump to the next record (if possible)
+  // if not possible, than don't jump (implemented in seek) and in next
+  // iteration of this function the end of file will be detected
+
+  return true;
+}
+
 void extract_files(char *fileName, struct files_to_process ftprint, 
                  bool verbose){
 
+  if (fileName[0] == 0)
+    errx(2, "tar: Refusing to read archive contents from terminal (missing -f "
+            "option?)\ntar: Error is not recoverable: exiting now");
+  FILE *f = fopen(fileName, "r");
+  if (f == NULL)
+    errx(2,
+         "%s: Cannot open: No such file or directory\n Error is not "
+         "recoverable: exiting now",
+         fileName);
+  //open_file(f, fileName);
+  
+  long long file_length = get_tar_file_length(f);
+
+  bool fileRead = true;
+  while (fileRead) {
+    //PROCESS FILE
+    fileRead = extract_file_and_jump(f, ftprint, file_length, verbose);
+    long long current_offset = ftell(f);
+
+    if (current_offset == -1) {
+      ftell_unsuccessful();
+    } else if (current_offset ==
+               file_length) { // when we are at the end of the file, it
+                              // means that two blocks are missing
+      deallocate_files_to_process(&ftprint);
+      exit(0);
+    }
+  }
+  long long current_offset = ftell(f);
+  if (current_offset == -1) {
+    ftell_unsuccessful();
+  }
+
+  // if there is only one block at the end. When there are two, it is ok
+  if (current_offset + MULTIPLE <= file_length &&
+      current_offset + 2 * MULTIPLE > file_length) {
+    warnx("A lone zero block at %lld", (current_offset + MULTIPLE) / MULTIPLE);
+  }
+
+  if (fclose(f) == EOF) {
+    fclose_unsuccessful();
+  }
 }
 
 void option_t(bool file, char fileName[], struct files_to_process ftprint) {
@@ -296,8 +463,7 @@ void strcpy_unsuccessful() {
   errx(2, "Internal error - can't use strcpy - destination is too small");
 }
 
-void safe_strcpy(char *dest, long long dest_len, char *source,
-                 long long source_len) {
+void safe_strcpy(char *dest, long long dest_len, char *source, long long source_len) {
   if (dest_len >= source_len)
     strcpy(dest, source);
   else
