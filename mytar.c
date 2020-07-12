@@ -413,12 +413,15 @@ void strcpy_unsuccessful() {
   errx(2, "Internal error - can't use strcpy - destination is too small");
 }
 
-void safe_strcpy(char *dest, long long dest_len, char *source,
+//returns true if strcpy succesful, otherwise false
+bool strcpy_ok(char *dest, long long dest_len, char *source,
                  long long source_len) {
   if (dest_len >= source_len)
     strcpy(dest, source);
   else
-    strcpy_unsuccessful();
+    return false;
+
+  return true;
 }
 
 void program(int argc, char *argv[]) {
@@ -443,8 +446,10 @@ void program(int argc, char *argv[]) {
                 "'tar --usage' for more information.");
       }
 
-      safe_strcpy(action.fileName, sizeof(action.fileName), argv[i],
-                  sizeof(argv[i]));
+      if(strcpy_ok(action.fileName, sizeof(action.fileName), argv[i],
+                  sizeof(argv[i])) != true){
+        strcpy_unsuccessful();
+      }
 
     } else if (!strcmp(argv[i], "-t")) { // LIST
       action.list = true;
@@ -464,9 +469,11 @@ void program(int argc, char *argv[]) {
         if (ftprocess.filenames[ftprocess.number] == NULL) {
           malloc_unsuccessful();
         }
-        safe_strcpy(ftprocess.filenames[ftprocess.number],
+        if(strcpy_ok(ftprocess.filenames[ftprocess.number],
                     sizeof(ftprocess.filenames[ftprocess.number]), argv[i],
-                    sizeof(argv[i]));
+                    sizeof(argv[i])) != true){
+          strcpy_unsuccessful();
+        }
         ftprocess.number++;
       } else {
         // commented to pass the tests:
