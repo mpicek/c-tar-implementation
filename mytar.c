@@ -26,8 +26,12 @@ blocksize)
 #define SIZE_LOCATION 124
 #define TYPEFLAG_LOCATION 156
 #define TYPEFLAG_LENGTH 2
+#define MAGIC_LOCATION 257
+#define MAGIC_LENGTH 6
+#define PROPER_MAGIC "ustar"
 #define MULTIPLE 512
 #define REGULAR_FILE_FLAG 0
+#define DIRECTORY_FILE_FLAG 5
 
 struct files_to_process {
   int number; // number of files to be listed
@@ -60,6 +64,12 @@ void fopen_unsuccessful(char fileName[]) {
          "%s: Cannot open: No such file or directory\n Error is not "
          "recoverable: exiting now",
          fileName);
+}
+
+void magic_err() {
+  warnx("This does not look like a tar archive");
+  warnx("Skipping to next header");
+  errx(2, "Exiting with failure status due to previous errors");
 }
 
 void fclose_unsuccessful() { errx(2, "Internal error - fclose unsuccessful"); }
@@ -178,14 +188,22 @@ void get_size_of_file(FILE *f, char sizeStr[], long long file_length){
   read_string(f, SIZE_LOCATION, sizeStr, SIZE_LENGTH, file_length); // read SIZE
 }
 
-void print_file(char name[], struct files_to_process ftprocess, bool delete_from_files_to_process) {
-  if (ftprocess.defined) {
-    for (int i = 0; i < ftprocess.number; ++i) {
-      if (strcmp(ftprocess.filenames[i], name) == 0) {
+void check_magic(FILE *f, long long file_length){
+  char magic[6];
+  read_string(f, MAGIC_LOCATION, magic, MAGIC_LENGTH, file_length);
+  if(strcmp(magic, PROPER_MAGIC) != 0){
+    magic_err();
+  }
+}
+
+void print_file(char name[], struct files_to_process *ftprocess, bool delete_from_files_to_process) {
+  if (ftprocess->defined) {
+    for (int i = 0; i < ftprocess->number; ++i) {
+      if (strcmp(ftprocess->filenames[i], name) == 0) {
         printf("%s\n", name);
         fflush(stdout);
         if(delete_from_files_to_process)
-          ftprocess.filenames[i][0] = '\0'; // it means the file is printed
+          ftprocess->filenames[i][0] = '\0'; // it means the file is printed
         break;
       }
     }
@@ -210,7 +228,6 @@ long long get_tar_file_length(FILE *f) {
   return file_length;
 }
 
-//TODO: verbose
 void create_and_extract_to_file(FILE *f, char name[], long long size, 
               long long file_length, struct files_to_process ftprocess){
 
@@ -253,6 +270,11 @@ void create_and_extract_to_file(FILE *f, char name[], long long size,
       if(is_error == EOF)
         fputc_unsuccessful();
     }
+
+    if (fclose(extracted_file) == EOF) {
+      fclose_unsuccessful();
+    }
+
     long long positionNow = ftell(f); // get current position
     if (positionNow == -1) {
       ftell_unsuccessful();
@@ -272,11 +294,6 @@ bool process_one_file_and_jump(FILE *f, struct action_info action, struct files_
   get_name_of_file(f, name, file_length);
   get_flag_of_file(f, typeflag, file_length);
 
-  // when it is not regular file but there is file (name[0] != 0)
-  if ((typeflag[0] - '0' != REGULAR_FILE_FLAG) && (name[0] != 0)) {
-    errx(2, "Unsupported header type: %d", typeflag[0]);
-  }
-
   if (name[0] == 0)
     return false; // when this is an empty block at the end of the .tar file
 
@@ -285,15 +302,23 @@ bool process_one_file_and_jump(FILE *f, struct action_info action, struct files_
   long long size = oct_to_dec(sizeStr);
 
   if(action.list){
-    print_file(name, ftprocess, true);
+  // when it is not regular file but there is file (name[0] != 0)
+    if ((typeflag[0] - '0' != REGULAR_FILE_FLAG) && (name[0] != 0)) {
+      errx(2, "Unsupported header type: %d", typeflag[0]);
+    }
+    print_file(name, &ftprocess, true);
   }
   else if(action.extract){
+    // when it is not regular file but there is file (name[0] != 0)
+    if ((typeflag[0] - '0' != REGULAR_FILE_FLAG && 
+         typeflag[0] - '0' != DIRECTORY_FILE_FLAG) && (name[0] != 0)) {
+      errx(2, "Unsupported header type: %d", typeflag[0]);
+    }
     if(action.verbose)
-      print_file(name, ftprocess, false);
-    create_and_extract_to_file(f, name, size, file_length, ftprocess);
+      print_file(name, &ftprocess, false);
+    if(strcmp(name, "./") != 0)
+      create_and_extract_to_file(f, name, size, file_length, ftprocess);
   }
-
-  check_processed_files(ftprocess);
 
   long long padding = 0;
   if (size % MULTIPLE)
@@ -319,6 +344,8 @@ void process_action(struct action_info action, struct files_to_process ftprocess
   
   long long file_length = get_tar_file_length(f);
 
+  check_magic(f, file_length);
+
   bool fileRead = true;
   while (fileRead) {
     //PROCESS FILE
@@ -334,6 +361,9 @@ void process_action(struct action_info action, struct files_to_process ftprocess
       exit(0);
     }
   }
+
+  check_processed_files(ftprocess);
+
   long long current_offset = ftell(f);
   if (current_offset == -1) {
     ftell_unsuccessful();
